@@ -197,43 +197,34 @@ public class Translator {
                         expectedSymbolStack.push(Terminal.NTS_WHERE_CLAUSE);
                         expectedSymbolStack.push(Terminal.TS_FROM);
                         expectedSymbolStack.push(Terminal.TS_SELECT);
-                        System.out.println("0.  SELECT_QUERY -> \"SELECT\" \"FROM\" WHERE_CLAUSE");
                     } break;
                     case 1: {       // 1.  WHERE_CLAUSE -> SKIP_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_SKIP_CLAUSE);
-                        System.out.println("1.  WHERE_CLAUSE -> SKIP_CLAUSE");
                     } break;
                     case 2: {       // 2.  WHERE_CLAUSE -> "WHERE" WHERE_EXPR
                         expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
                         expectedSymbolStack.push(Terminal.TS_WHERE);
-                        System.out.println("2.  WHERE_CLAUSE -> \"WHERE\" WHERE_EXPR");
                     } break;
                     case 3: {       // 3.  WHERE_EXPR -> "AND" WHERE_EXPR
                         expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
                         expectedSymbolStack.push(Terminal.TS_AND);
-                        System.out.println("3.  WHERE_EXPR -> \"AND\" WHERE_EXPR");
                     } break;
                     case 4: {       // 4.  WHERE_EXPR -> SKIP_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_SKIP_CLAUSE);
-                        System.out.println("4.  WHERE_EXPR -> SKIP_CLAUSE");
                     } break;
                     case 5: {       // 5.  SKIP_CLAUSE -> "SKIP" LIMIT_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_LIMIT_CLAUSE);
                         expectedSymbolStack.push(Terminal.TS_SKIP);
-                        System.out.println("5.  SKIP_CLAUSE -> \"SKIP\" LIMIT_CLAUSE");
                     } break;
                     case 6: {       // 6.  SKIP_CLAUSE -> LIMIT_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_LIMIT_CLAUSE);
-                        System.out.println("6.  SKIP_CLAUSE -> LIMIT_CLAUSE");
                     } break;
                     case 7: {       // 7.  LIMIT_CLAUSE -> "LIMIT" $
                         expectedSymbolStack.push(Terminal.TS_END);
                         expectedSymbolStack.push(Terminal.TS_LIMIT);
-                        System.out.println("7.  LIMIT_CLAUSE -> \"LIMIT\" $");
                     } break;
                     case 8: {       // 8.  LIMIT_CLAUSE -> $
                         expectedSymbolStack.push(Terminal.TS_END);
-                        System.out.println("8.  LIMIT_CLAUSE -> $");
                     } break;
                     default: {
                         throw new IllegalArgumentException("logic of your SQL query is not correct");
