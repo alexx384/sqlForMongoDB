@@ -113,6 +113,7 @@ public class Translator {
                 if (value == '>') {
                     sign = MongoShellBuilder.WhereExpression.CompareSign.NON_EQUALS;
                 } else {
+                    iterator.setIndex(iterator.getIndex() - 1);
                     if (firstMapping.isNumber) {
                         sign = MongoShellBuilder.WhereExpression.CompareSign.GREATER;
                     } else {
@@ -198,7 +199,8 @@ public class Translator {
                         expectedSymbolStack.push(Terminal.TS_FROM);
                         expectedSymbolStack.push(Terminal.TS_SELECT);
                     } break;
-                    case 1: {       // 1.  WHERE_CLAUSE -> SKIP_CLAUSE
+                    case 1:         // 1.  WHERE_CLAUSE -> SKIP_CLAUSE
+                    case 4: {       // 4.  WHERE_EXPR -> SKIP_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_SKIP_CLAUSE);
                     } break;
                     case 2: {       // 2.  WHERE_CLAUSE -> "WHERE" WHERE_EXPR
@@ -208,9 +210,6 @@ public class Translator {
                     case 3: {       // 3.  WHERE_EXPR -> "AND" WHERE_EXPR
                         expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
                         expectedSymbolStack.push(Terminal.TS_AND);
-                    } break;
-                    case 4: {       // 4.  WHERE_EXPR -> SKIP_CLAUSE
-                        expectedSymbolStack.push(Terminal.NTS_SKIP_CLAUSE);
                     } break;
                     case 5: {       // 5.  SKIP_CLAUSE -> "SKIP" LIMIT_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_LIMIT_CLAUSE);
@@ -239,9 +238,6 @@ public class Translator {
     public static void main(String[] args) {
         System.out.println(
                 Translator.translate("SELECT * FROM customers WHERE age > 22")
-//                Translator.translate("SELECT * FROM collection OFFSET 5 LIMIT 10")
-//                Translator.translate("SELECT name, surname FROM collection")
-//                Translator.translate("SELECT * FROM sales LIMIT 10")
         );
     }
 }

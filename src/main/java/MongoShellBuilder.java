@@ -86,6 +86,7 @@ public class MongoShellBuilder {
         if (varMapping == null || valueMapping == null) {
             throw new NullPointerException();
         }
+
         whereExpressions.add(
                 new WhereExpression(
                         varMapping,
@@ -133,12 +134,14 @@ public class MongoShellBuilder {
             WhereExpression firstExpression = whereExpressions.remove();
             builder.append(chars, firstExpression.varMapping.offset, firstExpression.varMapping.length).append(": {")
                     .append(firstExpression.sign.value).append(": ")
-                    .append(chars, firstExpression.valueMapping.offset, firstExpression.valueMapping.length);
+                    .append(chars, firstExpression.valueMapping.offset, firstExpression.valueMapping.length)
+                    .append('}');
             for (WhereExpression whereExpression : whereExpressions) {
                 builder.append(", ")
                         .append(chars, whereExpression.varMapping.offset, whereExpression.varMapping.length).append(": {")
                         .append(whereExpression.sign.value).append(": ")
-                        .append(chars, whereExpression.valueMapping.offset, whereExpression.valueMapping.length);
+                        .append(chars, whereExpression.valueMapping.offset, whereExpression.valueMapping.length)
+                        .append('}');
             }
         }
 
