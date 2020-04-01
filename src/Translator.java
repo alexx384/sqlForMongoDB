@@ -1,144 +1,239 @@
 import java.text.CharacterIterator;
-import java.text.StringCharacterIterator;
 import java.util.Stack;
 
+// TODO: Implement constraint - "Database names must have fewer than 64 characters".
+
 /**
- * Grammatics in BNF
+ * LL grammar in BNF form
  *
- * 0.  SELECT_QUERY -> "SELECT" SELECT_CLAUSE
- * 1.  SELECT_CLAUSE -> \w SELECT_EXPR
- * 2.  SELECT_EXPR -> "," SELECT_CLAUSE
- * 3.  SELECT_CLAUSE -> "*" "FROM" FROM_CLAUSE
- * 4.  SELECT_EXPR -> "FROM" FROM_CLAUSE
- * 5.  FROM_CLAUSE -> \w FROM_EXPR
- * 6.  FROM_EXPR -> ',' FROM_CLAUSE
- * 7.  FROM_EXPR -> WHERE_OPTION
- * 8.  WHERE_OPTION -> "WHERE" WHERE_CLAUSE
- * 9.  WHERE_CLAUSE -> \w ['=''<''>''<>'] \d WHERE_EXPR
- * 10. WHERE_CLAUSE -> \d ['=''<''>''<>'] \w WHERE_EXPR
- * 11. WHERE_OPTION -> SKIP_OPTION
- * 12. SKIP_OPTION -> "SKIP" \d LIMIT_OPTION
- * 13. SKIP_OPTION -> "OFFSET" \d LIMIT_OPTION
- * 14. SKIP_OPTION -> LIMIT_OPTION
- * 15. LIMIT_OPTION -> "LIMIT" \d $
- * 16. LIMIT_OPTION -> $
- * 17. WHERE_EXPR -> "AND" WHERE_EXPR
- * 18. WHERE_EXPR -> SKIP_OPTION
+ * 0.  SELECT_QUERY -> "SELECT" "FROM" WHERE_CLAUSE
+ * 1.  WHERE_CLAUSE -> SKIP_CLAUSE
+ * 2.  WHERE_CLAUSE -> "WHERE" WHERE_EXPR
+ * 3.  WHERE_EXPR -> "AND" WHERE_EXPR
+ * 4.  WHERE_EXPR -> SKIP_CLAUSE
+ * 5.  SKIP_CLAUSE -> "SKIP" LIMIT_CLAUSE
+ * 6.  SKIP_CLAUSE -> "OFFSET" LIMIT_CLAUSE
+ * 7.  SKIP_CLAUSE -> LIMIT_CLAUSE
+ * 8.  LIMIT_CLAUSE -> "LIMIT" $
+ * 9.  LIMIT_CLAUSE -> $
  */
 
 public class Translator {
-    public static void translate(String sqlQuery) {
-        CharacterIterator inputIterator = new StringCharacterIterator(sqlQuery);
+    /**
+     * Check for bad naming symbol according to MongoDB documentation
+     * https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
+     *
+     * @return true is the symbol can present in the name
+     */
+    private static boolean isBadNameSymbol(char value) {
+        switch (value) {
+            case '/':
+            case '\\':
+            case '.':
+            case ' ':
+            case '"':
+            case '$':
+            case '*':
+            case '<':
+            case '>':
+            case ':':
+            case '|':
+            case '?':{
+                return true;
+            }
+            default:{
+                return false;
+            }
+        }
+    }
+
+    public static CharsMapping parseNameOrValue(CharacterIterator iterator) {
+        boolean isNumber = true;
+        char value = iterator.current();
+        while (value == ' ') {
+            value = iterator.next();
+        }
+
+        int startIdx = iterator.getIndex();
+        while (value != ' ' && value != ',' && value != CharacterIterator.DONE) {
+            if (value < '0' || '9' < value) {
+                isNumber = false;
+                if (isBadNameSymbol(value)) {
+                    throw new IllegalArgumentException("is not a valid symbol '" + iterator.current()
+                            + "' at position " + iterator.getIndex());
+                }
+            }
+
+            value = iterator.next();
+        }
+        return new CharsMapping(startIdx, iterator.getIndex(), isNumber);
+    }
+
+    public static void parseSelectExpression(CharacterIterator iterator, MongoShellBuilder mongoShellBuilder) {
+        boolean isParsingNotDone = true;
+
+        char value = iterator.next();
+        while (value == ' ') {
+            value = iterator.next();
+        }
+        if (value == '*') {
+            if (iterator.next() == ' ') {
+                mongoShellBuilder.setSelectAll();
+                return;
+            } else {
+                throw new IllegalArgumentException("is not a valid symbol '" + iterator.current()
+                        + "' at position " + iterator.getIndex());
+            }
+        }
+        while (isParsingNotDone) {
+            CharsMapping charsMapping = parseNameOrValue(iterator);
+            mongoShellBuilder.addSelectField(charsMapping);
+            value = iterator.current();
+            while (value == ' ') {
+                value = iterator.next();
+            }
+            if (value != ',') {
+                isParsingNotDone = false;
+            }
+            iterator.setIndex(iterator.getIndex() + 1);
+        }
+        iterator.setIndex(iterator.getIndex() - 1);
+    }
+
+    public static void parseWhereExpression(CharacterIterator iterator, MongoShellBuilder mongoShellBuilder) {
+        CharsMapping firstMapping = parseNameOrValue(iterator);
+        char value = iterator.next();
+        while (value == ' ') {
+            value = iterator.next();
+        }
+        MongoShellBuilder.WhereExpression.CompareSign sign;
+        switch (value) {
+            case '<': {
+                value = iterator.next();
+                if (value == '>') {
+                    sign = MongoShellBuilder.WhereExpression.CompareSign.NON_EQUALS;
+                } else {
+                    if (firstMapping.isNumber) {
+                        sign = MongoShellBuilder.WhereExpression.CompareSign.GREATER;
+                    } else {
+                        sign = MongoShellBuilder.WhereExpression.CompareSign.LOWER;
+                    }
+                }
+            } break;
+            case '=': {
+                sign = MongoShellBuilder.WhereExpression.CompareSign.EQUALS;
+            } break;
+            case '>': {
+                if (firstMapping.isNumber) {
+                    sign = MongoShellBuilder.WhereExpression.CompareSign.LOWER;
+                } else {
+                    sign = MongoShellBuilder.WhereExpression.CompareSign.GREATER;
+                }
+            } break;
+            default: {
+                throw new IllegalArgumentException("is not a valid symbol '" + iterator.current()
+                        + "' at position " + iterator.getIndex());
+            }
+        }
+        if (iterator.next() != ' ') {
+            throw new IllegalArgumentException("is not a valid symbol '" + iterator.current()
+                    + "' at position " + iterator.getIndex());
+        }
+        CharsMapping secondMapping = parseNameOrValue(iterator);
+        if (firstMapping.isNumber) {
+            if (!secondMapping.isNumber) {
+                mongoShellBuilder.addWhereExpression(secondMapping, sign, firstMapping);
+            } else {
+                throw new IllegalArgumentException("in Where statement must be one number and one variable");
+            }
+        } else {
+            if (secondMapping.isNumber) {
+                mongoShellBuilder.addWhereExpression(firstMapping, sign, secondMapping);
+            } else {
+                throw new IllegalArgumentException("in Where statement must be one number and one variable");
+            }
+        }
+    }
+
+    public static String translate(String sqlQuery) {
+        char[] charSqlQuery = sqlQuery.toCharArray();
+        CharacterIterator inputIterator = new CharArrayIterator(charSqlQuery);
+        MongoShellBuilder mongoShellBuilder = new MongoShellBuilder(charSqlQuery);
 
         final Stack<Terminal> expectedSymbolStack = new Stack<>();
         final Stack<Terminal> actualSymbolStack = new Stack<>();
         expectedSymbolStack.push(Terminal.NTS_SELECT_QUERY);
-        actualSymbolStack.push(Terminal.toTerminal(inputIterator));
+        actualSymbolStack.push(Terminal.getTerminal(inputIterator));
 
         while (!expectedSymbolStack.isEmpty()) {
             if (expectedSymbolStack.peek() == actualSymbolStack.peek()) {
-                System.out.println(actualSymbolStack.pop().toString());
-                expectedSymbolStack.pop();
+
+                actualSymbolStack.pop();
+                switch (expectedSymbolStack.pop()) {
+                    case TS_SELECT: {
+                        parseSelectExpression(inputIterator, mongoShellBuilder);
+                    } break;
+                    case TS_FROM: {
+                        mongoShellBuilder.setFromDatabaseName(parseNameOrValue(inputIterator));
+                    } break;
+                    case TS_WHERE:
+                    case TS_AND: {
+                        parseWhereExpression(inputIterator, mongoShellBuilder);
+                    } break;
+                    case TS_SKIP: {
+                        mongoShellBuilder.setSkipValue(parseNameOrValue(inputIterator));
+                    } break;
+                    case TS_LIMIT: {
+                        mongoShellBuilder.setLimitValue(parseNameOrValue(inputIterator));
+                    } break;
+                }
+
                 if (!expectedSymbolStack.isEmpty()) {
-                    actualSymbolStack.push(Terminal.toTerminal(inputIterator));
+                    actualSymbolStack.push(Terminal.getTerminal(inputIterator));
                 }
             } else {
                 switch (ParseTable.getCase(expectedSymbolStack.pop(), actualSymbolStack.peek())) {
-                    case 0: {       // 0.  SELECT_QUERY -> "SELECT" SELECT_CLAUSE
-                        expectedSymbolStack.push(Terminal.NTS_SELECT_CLAUSE);
-                        expectedSymbolStack.push(Terminal.TS_SELECT);
-                        System.out.println("0.  SELECT_QUERY -> \"SELECT\" SELECT_CLAUSE");
-                    } break;
-                    case 1: {       // 1.  SELECT_CLAUSE -> \w SELECT_EXPR
-                        expectedSymbolStack.push(Terminal.NTS_SELECT_EXPR);
-                        expectedSymbolStack.push(Terminal.TS_NAME);
-                        System.out.println("1.  SELECT_CLAUSE -> \\w SELECT_EXPR");
-                    } break;
-                    case 2: {       // 2.  SELECT_EXPR -> "," SELECT_CLAUSE
-                        expectedSymbolStack.push(Terminal.NTS_SELECT_CLAUSE);
-                        expectedSymbolStack.push(Terminal.TS_COMMA);
-                        System.out.println("2.  SELECT_EXPR -> \",\" SELECT_CLAUSE");
-                    } break;
-                    case 3: {       // 3.  SELECT_CLAUSE -> "*" "FROM" FROM_CLAUSE
-                        expectedSymbolStack.push(Terminal.NTS_FROM_CLAUSE);
-                        expectedSymbolStack.push(Terminal.TS_FROM);
-                        expectedSymbolStack.push(Terminal.TS_ASTERISK);
-                        System.out.println("3.  SELECT_CLAUSE -> \"*\" \"FROM\" FROM_CLAUSE");
-                    } break;
-                    case 4: {       // 4.  SELECT_EXPR -> "FROM" FROM_CLAUSE
-                        expectedSymbolStack.push(Terminal.NTS_FROM_CLAUSE);
-                        expectedSymbolStack.push(Terminal.TS_FROM);
-                        System.out.println("4.  SELECT_EXPR -> \"FROM\" FROM_CLAUSE");
-                    } break;
-                    case 5: {       // 5.  FROM_CLAUSE -> \w FROM_EXPR
-                        expectedSymbolStack.push(Terminal.NTS_FROM_EXPR);
-                        expectedSymbolStack.push(Terminal.TS_NAME);
-                        System.out.println("5.  FROM_CLAUSE -> \\w FROM_EXPR");
-                    } break;
-                    case 6: {       // 6.  FROM_EXPR -> ',' FROM_CLAUSE
-                        expectedSymbolStack.push(Terminal.NTS_FROM_CLAUSE);
-                        expectedSymbolStack.push(Terminal.TS_COMMA);
-                        System.out.println("6.  FROM_EXPR -> ',' FROM_CLAUSE");
-                    } break;
-                    case 7: {       // 7.  FROM_EXPR -> WHERE_OPTION
-                        expectedSymbolStack.push(Terminal.NTS_WHERE_OPTION);
-                        System.out.println("7.  FROM_EXPR -> WHERE_OPTION");
-                    } break;
-                    case 8: {       // 8.  WHERE_OPTION -> "WHERE" WHERE_CLAUSE
+                    case 0: {       // 0.  SELECT_QUERY -> "SELECT" "FROM" WHERE_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_WHERE_CLAUSE);
+                        expectedSymbolStack.push(Terminal.TS_FROM);
+                        expectedSymbolStack.push(Terminal.TS_SELECT);
+                        System.out.println("0.  SELECT_QUERY -> \"SELECT\" \"FROM\" WHERE_CLAUSE");
+                    } break;
+                    case 1: {       // 1.  WHERE_CLAUSE -> SKIP_CLAUSE
+                        expectedSymbolStack.push(Terminal.NTS_SKIP_CLAUSE);
+                        System.out.println("1.  WHERE_CLAUSE -> SKIP_CLAUSE");
+                    } break;
+                    case 2: {       // 2.  WHERE_CLAUSE -> "WHERE" WHERE_EXPR
+                        expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
                         expectedSymbolStack.push(Terminal.TS_WHERE);
-                        System.out.println("8.  WHERE_OPTION -> \"WHERE\" WHERE_CLAUSE");
+                        System.out.println("2.  WHERE_CLAUSE -> \"WHERE\" WHERE_EXPR");
                     } break;
-                    case 9: {       // 9.  WHERE_CLAUSE -> \w ['=''<''>''<>'] \d WHERE_EXPR
-                        expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
-                        expectedSymbolStack.push(Terminal.TS_NUMBER);
-                        expectedSymbolStack.push(Terminal.TS_COMPARATOR);
-                        expectedSymbolStack.push(Terminal.TS_NAME);
-                        System.out.println("9.  WHERE_CLAUSE -> \\w ['=''<''>''<>'] \\d WHERE_EXPR");
-                    } break;
-                    case 10: {      // 10. WHERE_CLAUSE -> \d ['=''<''>''<>'] \w WHERE_EXPR
-                        expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
-                        expectedSymbolStack.push(Terminal.TS_NAME);
-                        expectedSymbolStack.push(Terminal.TS_COMPARATOR);
-                        expectedSymbolStack.push(Terminal.TS_NUMBER);
-                        System.out.println("10. WHERE_CLAUSE -> \\d ['=''<''>''<>'] \\w WHERE_EXPR");
-                    } break;
-                    case 11: {      // 11. WHERE_OPTION -> SKIP_OPTION
-                        expectedSymbolStack.push(Terminal.NTS_SKIP_OPTION);
-                        System.out.println("11. WHERE_OPTION -> SKIP_OPTION");
-                    } break;
-                    case 12: {      // 12. SKIP_OPTION -> "SKIP" \d LIMIT_OPTION
-                        expectedSymbolStack.push(Terminal.NTS_LIMIT_OPTION);
-                        expectedSymbolStack.push(Terminal.TS_NUMBER);
-                        expectedSymbolStack.push(Terminal.TS_SKIP);
-                        System.out.println("12. SKIP_OPTION -> \"SKIP\" \\d LIMIT_OPTION");
-                    } break;
-                    case 13: {      // 13. SKIP_OPTION -> "OFFSET" \d LIMIT_OPTION
-                        expectedSymbolStack.push(Terminal.NTS_LIMIT_OPTION);
-                        expectedSymbolStack.push(Terminal.TS_NUMBER);
-                        expectedSymbolStack.push(Terminal.TS_OFFSET);
-                        System.out.println("13. SKIP_OPTION -> \"OFFSET\" \\d LIMIT_OPTION");
-                    } break;
-                    case 14: {      // 14. SKIP_OPTION -> LIMIT_OPTION
-                        expectedSymbolStack.push(Terminal.NTS_LIMIT_OPTION);
-                        System.out.println("14. SKIP_OPTION -> LIMIT_OPTION");
-                    } break;
-                    case 15: {      // 15. LIMIT_OPTION -> "LIMIT" \d $
-                        expectedSymbolStack.push(Terminal.TS_NUMBER);
-                        expectedSymbolStack.push(Terminal.TS_LIMIT);
-                        System.out.println("15. LIMIT_OPTION -> \"LIMIT\" \\d $");
-                    } break;
-                    case 16: {      // 16. LIMIT_OPTION -> $
-                        System.out.println("16. LIMIT_OPTION -> $");
-                    } break;
-                    case 17: {      // 17. WHERE_EXPR -> "AND" WHERE_EXPR
+                    case 3: {       // 3.  WHERE_EXPR -> "AND" WHERE_EXPR
                         expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
                         expectedSymbolStack.push(Terminal.TS_AND);
-                        System.out.println("17. WHERE_EXPR -> \"AND\" WHERE_EXPR");
+                        System.out.println("3.  WHERE_EXPR -> \"AND\" WHERE_EXPR");
                     } break;
-                    case 18: {      // 18. WHERE_EXPR -> SKIP_OPTION
-                        expectedSymbolStack.push(Terminal.NTS_SKIP_OPTION);
-                        System.out.println("18. WHERE_EXPR -> SKIP_OPTION");
+                    case 4: {       // 4.  WHERE_EXPR -> SKIP_CLAUSE
+                        expectedSymbolStack.push(Terminal.NTS_SKIP_CLAUSE);
+                        System.out.println("4.  WHERE_EXPR -> SKIP_CLAUSE");
+                    } break;
+                    case 5: {       // 5.  SKIP_CLAUSE -> "SKIP" LIMIT_CLAUSE
+                        expectedSymbolStack.push(Terminal.NTS_LIMIT_CLAUSE);
+                        expectedSymbolStack.push(Terminal.TS_SKIP);
+                        System.out.println("5.  SKIP_CLAUSE -> \"SKIP\" LIMIT_CLAUSE");
+                    } break;
+                    case 6: {       // 6.  SKIP_CLAUSE -> LIMIT_CLAUSE
+                        expectedSymbolStack.push(Terminal.NTS_LIMIT_CLAUSE);
+                        System.out.println("6.  SKIP_CLAUSE -> LIMIT_CLAUSE");
+                    } break;
+                    case 7: {       // 7.  LIMIT_CLAUSE -> "LIMIT" $
+                        expectedSymbolStack.push(Terminal.TS_END);
+                        expectedSymbolStack.push(Terminal.TS_LIMIT);
+                        System.out.println("7.  LIMIT_CLAUSE -> \"LIMIT\" $");
+                    } break;
+                    case 8: {       // 8.  LIMIT_CLAUSE -> $
+                        expectedSymbolStack.push(Terminal.TS_END);
+                        System.out.println("8.  LIMIT_CLAUSE -> $");
                     } break;
                     default: {
                         throw new IllegalArgumentException("logic of your SQL query is not correct");
@@ -146,9 +241,16 @@ public class Translator {
                 }
             }
         }
+
+        return mongoShellBuilder.build();
     }
 
     public static void main(String[] args) {
-        Translator.translate("SELECT * FROM sales LIMIT 10");
+        System.out.println(
+                Translator.translate("SELECT * FROM customers WHERE age > 22")
+//                Translator.translate("SELECT * FROM collection OFFSET 5 LIMIT 10")
+//                Translator.translate("SELECT name, surname FROM collection")
+//                Translator.translate("SELECT * FROM sales LIMIT 10")
+        );
     }
 }

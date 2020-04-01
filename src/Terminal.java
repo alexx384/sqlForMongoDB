@@ -3,110 +3,38 @@ import java.text.CharacterIterator;
 public enum Terminal {
     /* Terminal symbols */
     TS_SELECT(0, true),
-    TS_NAME(1, true),
-    TS_FROM(2, true),
-    TS_COMMA(3, true),
-    TS_ASTERISK(4, true),
-    TS_WHERE(5, true),
-    TS_NUMBER(6, true),
-    TS_SKIP(7, true),
-    TS_OFFSET(8, true),
-    TS_LIMIT(9, true),
-    TS_AND(10, true),
-    TS_COMPARATOR(11, true),
-//    TS_END(11),
+    TS_FROM(1, true),
+    TS_WHERE(2, true),
+    TS_SKIP(3, true),
+    TS_LIMIT(4, true),
+    TS_AND(5, true),
+    TS_END(6, true),
+    TS_UNKNOWN(-1, true),
 
     /* Non-terminal symbols */
     NTS_SELECT_QUERY(0, false),
-    NTS_SELECT_CLAUSE(1, false),
-    NTS_SELECT_EXPR(2, false),
-    NTS_FROM_CLAUSE(3, false),
-    NTS_FROM_EXPR(4, false),
-    NTS_WHERE_OPTION(5, false),
-    NTS_WHERE_CLAUSE(6, false),
-    NTS_SKIP_OPTION(7, false),
-    NTS_LIMIT_OPTION(8, false),
-    NTS_WHERE_EXPR(9, false);
+    NTS_WHERE_CLAUSE(1, false),
+    NTS_WHERE_EXPR(2, false),
+    NTS_SKIP_CLAUSE(3, false),
+    NTS_LIMIT_CLAUSE(4, false);
 
     public final int value;
-    public final boolean terminal;
+    public final boolean isTerminal;
 
-    Terminal(int value, boolean terminal) {
+    Terminal(int value, boolean isTerminal) {
         this.value = value;
-        this.terminal = terminal;
-    }
-    /**
-     * Check for bad naming symbol according to MongoDB documentation
-     * https://docs.mongodb.com/manual/reference/limits/#naming-restrictions
-     *
-     * @return true is the symbol can present in the name
-     */
-    private static boolean isBadSymbol(char value) {
-        switch (value) {
-            case '/':
-            case '\\':
-            case '.':
-            case ' ':
-            case '"':
-            case '$':
-            case '*':
-            case '<':
-            case '>':
-            case ':':
-            case '|':
-            case '?':{
-                return true;
-            }
-            default:{
-                return false;
-            }
-        }
+        this.isTerminal = isTerminal;
     }
 
-    public static Terminal toTerminal(CharacterIterator iterator) {
-        // TODO: Implement constraint - "Database names must have fewer than 64 characters".
-
+    public static Terminal getTerminal(CharacterIterator iterator) {
         char value = iterator.current();
         while (value == ' ') {
             value = iterator.next();
         }
 
-//        if (isBadSymbol(value)) {
-//            throw new IllegalArgumentException("is not a valid symbol " + value
-//                    + " at position " + iterator.getIndex());
-//        }
-
-        Terminal result = TS_NAME;
+        Terminal result = Terminal.TS_UNKNOWN;
         switch (value) {
-            case '*': {
-                result = TS_ASTERISK;
-            } break;
-            case ',': {
-                result = TS_COMMA;
-            } break;
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9': {     // NUMBER
-                do {
-                    value = iterator.next();
-                }while ('0' <= value && value <= '9');
-                iterator.setIndex(iterator.getIndex() - 1);
-                result = TS_NUMBER;
-            } break;
-            case '<': {
-                if (iterator.next() != '>') {
-                    iterator.setIndex(iterator.getIndex() - 1);
-                }
-                result = TS_COMPARATOR;
-            } break;
-            case 'A': {
+            case 'A': {     // AND
                 if (iterator.next() == 'N' && iterator.next() == 'D') {
                     result = TS_AND;
                 }
@@ -116,16 +44,16 @@ public enum Terminal {
                     result = TS_FROM;
                 }
             } break;
-            case 'L': {
+            case 'L': {     // LIMIT
                 if (iterator.next() == 'I' && iterator.next() == 'M' && iterator.next() == 'I'
                         && iterator.next() == 'T') {
                     result = TS_LIMIT;
                 }
             } break;
-            case 'O': {     // OFFSET maybe unused
+            case 'O': {     // OFFSET
                 if (iterator.next() == 'F' && iterator.next() == 'F' && iterator.next() == 'S'
                         && iterator.next() == 'E' && iterator.next() == 'T') {
-                    result = TS_OFFSET;
+                    result = TS_SKIP;
                 }
             } break;
             case 'S': {     // SELECT, SKIP
@@ -137,35 +65,27 @@ public enum Terminal {
                     result = TS_SKIP;
                 }
             } break;
-            case 'W': {
+            case 'W': {     // WHERE
                 if (iterator.next() == 'H' && iterator.next() == 'E' && iterator.next() == 'R'
                         && iterator.next() == 'E') {
                     result = TS_WHERE;
                 }
             } break;
-            case CharacterIterator.DONE:    throw new IllegalStateException("Reached end of string to parsing");
+            case CharacterIterator.DONE:
+                return TS_END;
+            default:
+                throw new IllegalArgumentException("Can't parse '" + value + "' at position " + iterator.getIndex());
         }
 
-        if (result != TS_NAME) {
-            value = iterator.next();
-            if (value == ' ' || value == CharacterIterator.DONE) {
-                return result;
-            }
+        if (result == Terminal.TS_UNKNOWN) {
+            throw new IllegalArgumentException("Can't parse '" + value + "' at position " + iterator.getIndex());
         }
 
-        if (!isBadSymbol(iterator.current())) {
-            do {
-                value = iterator.next();
-
-//                if (isBadSymbol(value)) {
-//                    throw new IllegalArgumentException("is not a valid symbol " + value
-//                            + " at position " + iterator.getIndex());
-//                }
-            } while (value != ' ' && value != CharacterIterator.DONE);
-            return TS_NAME;
+        value = iterator.next();
+        if (value == ' ' || value == CharacterIterator.DONE) {
+            return result;
         } else {
-            throw new IllegalArgumentException("is not a valid symbol " + value
-                    + " at position " + iterator.getIndex());
+            throw new IllegalArgumentException("Can't parse '" + value + "' at position " + iterator.getIndex());
         }
     }
 }
