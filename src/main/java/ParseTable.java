@@ -10,6 +10,9 @@ public class ParseTable {
     };
 
     public static int getCase(Terminal nonTerminalSymbol, Terminal terminalSymbol) {
+        if (nonTerminalSymbol.isTerminal || !terminalSymbol.isTerminal) {
+            return UNK;
+        }
         byte tableRow = (byte) nonTerminalSymbol.value;
         byte tableColumn = (byte) terminalSymbol.value;
 

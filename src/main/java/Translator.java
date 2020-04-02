@@ -1,8 +1,6 @@
 import java.text.CharacterIterator;
 import java.util.Stack;
 
-// TODO: Implement constraint - "Database names must have fewer than 64 characters".
-
 /**
  * LL grammar in BNF form
  *

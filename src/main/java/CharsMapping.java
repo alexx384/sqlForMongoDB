@@ -10,4 +10,7 @@ public class CharsMapping {
         this.length = endIdx - startIdx;
         this.isNumber = isNumber;
     }
+    public int getEndIndex() {
+        return offset + length;
+    }
 }

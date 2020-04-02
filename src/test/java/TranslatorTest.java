@@ -88,10 +88,36 @@ class TranslatorTest {
     }
 
     @Test
-    void selectAnyFromWithWhitespaces() {
+    void selectAnyFromWhereSkipLimitWithWhitespaces() {
         assertEquals(
-                "db.s.find({}).limit(10)",
-                Translator.translate("SELECT  *  FROM  s  LIMIT  10 ")
+                "db.s.find({age: {$gt: 25}}).skip(5).limit(10)",
+                Translator.translate("SELECT  *  FROM  s  WHERE  age  >  25  SKIP 5  LIMIT  10 ")
         );
+    }
+
+    @Test
+    void selectAnyWhereWithBadLogic() {
+        assertThrows(IllegalArgumentException.class, () -> Translator.translate("SELECT * WHERE age > 25"));
+    }
+
+    @Test
+    void selectAnyFromWhereCompareTwoNumbers() {
+        assertThrows(IllegalArgumentException.class, () -> Translator.translate("SELECT * FROM s WHERE 1 = 1"));
+    }
+
+    @Test
+    void selectAnyFromWhereBadCompareSign() {
+        assertThrows(IllegalArgumentException.class, () -> Translator.translate("SELECT * FROM s WHERE 1 != 1"));
+    }
+
+    @Test
+    void selectAnyFromWhereNoWhitespaceAfterCompareSign() {
+        assertThrows(IllegalArgumentException.class, () -> Translator.translate("SELECT * FROM s WHERE 1 =1"));
+    }
+
+    @Test
+    void selectAnyFromWhereCompareTwoVariables() {
+        assertThrows(IllegalArgumentException.class,
+                () -> Translator.translate("SELECT * FROM s WHERE age = number"));
     }
 }
