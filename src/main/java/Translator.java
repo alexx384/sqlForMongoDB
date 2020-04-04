@@ -9,11 +9,10 @@ import java.util.Stack;
  * 2.  WHERE_CLAUSE -> "WHERE" WHERE_EXPR
  * 3.  WHERE_EXPR -> "AND" WHERE_EXPR
  * 4.  WHERE_EXPR -> SKIP_CLAUSE
- * 5.  SKIP_CLAUSE -> "SKIP" LIMIT_CLAUSE
- * 6.  SKIP_CLAUSE -> "OFFSET" LIMIT_CLAUSE
- * 7.  SKIP_CLAUSE -> LIMIT_CLAUSE
- * 8.  LIMIT_CLAUSE -> "LIMIT" $
- * 9.  LIMIT_CLAUSE -> $
+ * 5.  SKIP_CLAUSE -> "SKIP"/"OFFSET" LIMIT_CLAUSE
+ * 6.  SKIP_CLAUSE -> LIMIT_CLAUSE
+ * 7.  LIMIT_CLAUSE -> "LIMIT" $
+ * 8.  LIMIT_CLAUSE -> $
  */
 
 public class Translator {
@@ -209,7 +208,7 @@ public class Translator {
                         expectedSymbolStack.push(Terminal.NTS_WHERE_EXPR);
                         expectedSymbolStack.push(Terminal.TS_AND);
                     } break;
-                    case 5: {       // 5.  SKIP_CLAUSE -> "SKIP" LIMIT_CLAUSE
+                    case 5: {       // 5.  SKIP_CLAUSE -> "SKIP"/"OFFSET" LIMIT_CLAUSE
                         expectedSymbolStack.push(Terminal.NTS_LIMIT_CLAUSE);
                         expectedSymbolStack.push(Terminal.TS_SKIP);
                     } break;
